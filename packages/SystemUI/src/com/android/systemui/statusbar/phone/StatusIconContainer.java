@@ -38,6 +38,7 @@ import com.android.systemui.statusbar.stack.AnimationProperties;
 import com.android.systemui.statusbar.stack.ViewState;
 import java.util.ArrayList;
 
+
 /**
  * A container for Status bar system icons. Limits the number of system icons and handles overflow
  * similar to {@link NotificationIconContainer}.
@@ -66,6 +67,8 @@ public class StatusIconContainer extends AlphaOptimizedLinearLayout {
     private ArrayList<StatusIconState> mLayoutStates = new ArrayList<>();
     // So we can count and measure properly
     private ArrayList<View> mMeasureViews = new ArrayList<>();
+    // Create new child's order
+    private ArrayList<View> newChild = new ArrayList<>();
 
     public StatusIconContainer(Context context) {
         this(context, null);
@@ -100,13 +103,56 @@ public class StatusIconContainer extends AlphaOptimizedLinearLayout {
         mUnderflowWidth = mIconDotFrameWidth + (MAX_DOTS - 1) * (mStaticDotDiameter + mDotPadding);
     }
 
+    public void setNewChildOrder() {
+        newChild.clear();
+        boolean flag = false;
+        int changeSlot = 0;
+
+        for (int i = 0; i < getChildCount(); i++) {
+            StatusIconDisplayable icon = (StatusIconDisplayable) getChildAt(i);
+            String slotName = icon.getSlot();
+
+            switch (slotName) {
+                case "headset":
+                    newChild.add(0, getChildAt(i));
+                    changeSlot++;
+                    break;
+                case "alarm_clock":
+                    newChild.add(0, getChildAt(i));
+                    break;
+                case "mobile":
+                    newChild.add(getChildAt(i));
+                    flag = true;
+                    break;
+                default:
+                    if (flag) {
+                        newChild.add(0 + changeSlot, getChildAt(i));
+                        changeSlot++;
+                    } else {
+                        newChild.add(getChildAt(i));
+                    }
+                    break;
+            }
+        }
+    }
+
+    public View getNewChildAt(int num) {
+        return newChild.get(num);
+    }
+
+    public int getNewChildCount() {
+        return newChild.size();
+    }
+
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         float midY = getHeight() / 2.0f;
 
+        setNewChildOrder();
+
         // Layout all child views so that we can move them around later
-        for (int i = 0; i < getChildCount(); i++) {
-            View child = getChildAt(i);
+        for (int i = 0; i < getNewChildCount(); i++) {
+            View child = getNewChildAt(i);
             int width = child.getMeasuredWidth();
             int height = child.getMeasuredHeight();
             int top = (int) (midY - height / 2.0f);
@@ -140,12 +186,14 @@ public class StatusIconContainer extends AlphaOptimizedLinearLayout {
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         mMeasureViews.clear();
+        setNewChildOrder();
         int mode = MeasureSpec.getMode(widthMeasureSpec);
         final int width = MeasureSpec.getSize(widthMeasureSpec);
-        final int count = getChildCount();
+        final int count = getNewChildCount();
         // Collect all of the views which want to be laid out
-        for (int i = 0; i < count; i++) {
-            StatusIconDisplayable icon = (StatusIconDisplayable) getChildAt(i);
+        for (int i = 0; i < getNewChildCount(); i++) {
+            StatusIconDisplayable icon = (StatusIconDisplayable) getNewChildAt(i);
+
             if (icon.isIconVisible() && !icon.isIconBlocked()) {
                 mMeasureViews.add((View) icon);
             }
@@ -209,17 +257,18 @@ public class StatusIconContainer extends AlphaOptimizedLinearLayout {
      */
     private void calculateIconTranslations() {
         mLayoutStates.clear();
+        setNewChildOrder();
         float width = getWidth();
         float translationX = width - getPaddingEnd();
         float contentStart = getPaddingStart();
-        int childCount = getChildCount();
+        int childCount = getNewChildCount();
         // Underflow === don't show content until that index
         if (DEBUG) android.util.Log.d(TAG, "calculateIconTranslations: start=" + translationX
                 + " width=" + width + " underflow=" + mNeedsUnderflow);
 
         // Collect all of the states which want to be visible
         for (int i = childCount - 1; i >= 0; i--) {
-            View child = getChildAt(i);
+            View child = getNewChildAt(i);
             StatusIconDisplayable iconView = (StatusIconDisplayable) child;
             StatusIconState childState = getViewStateFromChild(child);
 
@@ -275,7 +324,7 @@ public class StatusIconContainer extends AlphaOptimizedLinearLayout {
         // Stole this from NotificationIconContainer. Not optimal but keeps the layout logic clean
         if (isLayoutRtl()) {
             for (int i = 0; i < childCount; i++) {
-                View child = getChildAt(i);
+                View child = getNewChildAt(i);
                 StatusIconState state = getViewStateFromChild(child);
                 state.xTranslation = width - state.xTranslation - child.getWidth();
             }
@@ -283,8 +332,9 @@ public class StatusIconContainer extends AlphaOptimizedLinearLayout {
     }
 
     private void applyIconStates() {
-        for (int i = 0; i < getChildCount(); i++) {
-            View child = getChildAt(i);
+        setNewChildOrder();
+        for (int i = 0; i < getNewChildCount(); i++) {
+            View child = getNewChildAt(i);
             StatusIconState vs = getViewStateFromChild(child);
             if (vs != null) {
                 vs.applyToView(child);
@@ -293,8 +343,9 @@ public class StatusIconContainer extends AlphaOptimizedLinearLayout {
     }
 
     private void resetViewStates() {
-        for (int i = 0; i < getChildCount(); i++) {
-            View child = getChildAt(i);
+        setNewChildOrder();
+        for (int i = 0; i < getNewChildCount(); i++) {
+            View child = getNewChildAt(i);
             StatusIconState vs = getViewStateFromChild(child);
             if (vs == null) {
                 continue;
